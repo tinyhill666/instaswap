@@ -28,6 +28,13 @@ private:
     std::string name;
   };
   typedef eosio::multi_index<"table"_n, tableStruct> table;
+  TABLE liquidity
+  {
+    name contract;
+    asset quantity;
+    uint64_t primary_key() const { return contract.value; }
+  };
+  typedef eosio::multi_index<"liquidity"_n, liquidity> liquidity_index;
 };
 
 // EOSIO_DISPATCH(tokenuniswap, (hi))
