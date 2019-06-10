@@ -16,14 +16,13 @@ void tokenuniswap::receive_eos(name from, name to, asset quantity, std::string m
   {
 
     // get EOS balance
-    double eos_balance = eosio::token::get_balance(SYSTEM_TOKEN_CONTRACT, get_self(), EOS_SYMBOL.code()).amount;
-
-    double received = quantity.amount;
+    double eos_balance = eosio::token::get_balance(SYSTEM_TOKEN_CONTRACT, STORE_CONTRACT, EOS_SYMBOL.code()).amount;
 
     // get UBI balance
-    double ubi_balance = eosio::token::get_balance(DAPP_TOKEN_CONTRACT, get_self(), UBI_SYMBOL.code()).amount;
+    double ubi_balance = eosio::token::get_balance(DAPP_TOKEN_CONTRACT, STORE_CONTRACT, UBI_SYMBOL.code()).amount;
 
     //deduct fee
+    double received = quantity.amount;
     received = received * (1 - FEE_RATE);
 
     double product = ubi_balance * eos_balance;
@@ -32,11 +31,20 @@ void tokenuniswap::receive_eos(name from, name to, asset quantity, std::string m
 
     auto buy_quantity = asset(buy, UBI_SYMBOL);
 
+    // transfer to user
     action(
-        permission_level{to, "active"_n},
+        permission_level{STORE_CONTRACT, "active"_n},
         DAPP_TOKEN_CONTRACT,
         "transfer"_n,
-        std::make_tuple(to, from, buy_quantity, std::string("Buy UBI with EOS")))
+        std::make_tuple(STORE_CONTRACT, from, buy_quantity, std::string("Buy UBI with EOS")))
+        .send();
+
+    // transfer fund to store
+    action(
+        permission_level{to, "active"_n},
+        SYSTEM_TOKEN_CONTRACT,
+        "transfer"_n,
+        std::make_tuple(to, STORE_CONTRACT, quantity, std::string("Buy UBI with EOS")))
         .send();
   }
 }
@@ -46,14 +54,13 @@ void tokenuniswap::receive_ubi(name from, name to, asset quantity, std::string m
   if (to == get_self() && quantity.symbol == UBI_SYMBOL)
   {
     // get EOS balance
-    double eos_balance = eosio::token::get_balance(SYSTEM_TOKEN_CONTRACT, get_self(), EOS_SYMBOL.code()).amount;
-
-    double received = quantity.amount;
+    double eos_balance = eosio::token::get_balance(SYSTEM_TOKEN_CONTRACT, STORE_CONTRACT, EOS_SYMBOL.code()).amount;
 
     // get UBI balance
-    double ubi_balance = eosio::token::get_balance(DAPP_TOKEN_CONTRACT, get_self(), UBI_SYMBOL.code()).amount;
+    double ubi_balance = eosio::token::get_balance(DAPP_TOKEN_CONTRACT, STORE_CONTRACT, UBI_SYMBOL.code()).amount;
 
     //deduct fee
+    double received = quantity.amount;
     received = received * (1 - FEE_RATE);
 
     double product = ubi_balance * eos_balance;
@@ -62,11 +69,20 @@ void tokenuniswap::receive_ubi(name from, name to, asset quantity, std::string m
 
     auto sell_quantity = asset(sell, EOS_SYMBOL);
 
+    // transfer to user
     action(
-        permission_level{to, "active"_n},
+        permission_level{STORE_CONTRACT, "active"_n},
         SYSTEM_TOKEN_CONTRACT,
         "transfer"_n,
-        std::make_tuple(to, from, sell_quantity, std::string("Sell UBI for EOS")))
+        std::make_tuple(STORE_CONTRACT, from, sell_quantity, std::string("Sell UBI for EOS")))
+        .send();
+
+    // transfer fund to store
+    action(
+        permission_level{to, "active"_n},
+        DAPP_TOKEN_CONTRACT,
+        "transfer"_n,
+        std::make_tuple(to, STORE_CONTRACT, quantity, std::string("Sell UBI for EOS")))
         .send();
   }
 }

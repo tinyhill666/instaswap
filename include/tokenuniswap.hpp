@@ -6,6 +6,7 @@
 #define UBI_SYMBOL symbol("UBI", 4)
 #define DAPP_TOKEN_CONTRACT "dappubitoken"_n
 #define SYSTEM_TOKEN_CONTRACT "eosio.token"_n
+#define STORE_CONTRACT "dappubistore"_n
 #define FEE_RATE 0.003
 
 using namespace eosio;
