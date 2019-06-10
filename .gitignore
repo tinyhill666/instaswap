@@ -1,0 +1,5 @@
+.eosproj
+.vscode
+.DS_Store
+*.wasm
+*.abi
