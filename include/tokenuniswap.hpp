@@ -2,12 +2,14 @@
 #include <eosiolib/print.hpp>
 #include <eosiolib/asset.hpp>
 
-#define EOS_SYMBOL symbol("EOS", 4)
+#define BASE_SYMBOL symbol("EOS", 4)
 #define UBI_SYMBOL symbol("UBI", 4)
 #define DAPP_TOKEN_CONTRACT "dappubitoken"_n
 #define SYSTEM_TOKEN_CONTRACT "eosio.token"_n
 #define STORE_CONTRACT "dappubistore"_n
 #define FEE_RATE 0.003
+#define DIRECTION_BUY 0
+#define DIRECTION_SELL 1
 
 using namespace eosio;
 
@@ -20,6 +22,7 @@ public:
   ACTION hi(name user);
   void receive_eos(name from, name to, asset quantity, std::string memo);
   void receive_ubi(name from, name to, asset quantity, std::string memo);
+  void receive_common(name user, uint8_t direction, bool isAdd, name token_contract, symbol token_symbol, asset in_quantity);
 
 private:
   TABLE tableStruct

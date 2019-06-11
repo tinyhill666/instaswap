@@ -12,120 +12,9 @@ ACTION tokenuniswap::hi(name user)
 
 void tokenuniswap::receive_eos(name from, name to, asset quantity, std::string memo)
 {
-  if (to == get_self() && quantity.symbol == EOS_SYMBOL)
+  if (to == get_self() && quantity.symbol == BASE_SYMBOL)
   {
-    // get EOS balance
-    double eos_balance = eosio::token::get_balance(SYSTEM_TOKEN_CONTRACT, STORE_CONTRACT, EOS_SYMBOL.code()).amount;
-
-    // get UBI balance
-    double ubi_balance = eosio::token::get_balance(DAPP_TOKEN_CONTRACT, STORE_CONTRACT, UBI_SYMBOL.code()).amount;
-
-    // add liquidity logic
-    if (memo == "add")
-    {
-      liquidity_index liquidityRecords(get_self(), from.value);
-      auto existing = liquidityRecords.find(DAPP_TOKEN_CONTRACT.value);
-      // not exsit
-      if (existing == liquidityRecords.end())
-      {
-        liquidityRecords.emplace(_self, [&](auto &record) {
-          record.contract = SYSTEM_TOKEN_CONTRACT;
-          record.quantity = quantity;
-        });
-      }
-      else
-      {
-        liquidityRecords.erase(existing);
-
-        auto ubi_quantity = existing->quantity;
-        auto ubi_amount = ubi_quantity.amount;
-        auto eos_quantity = quantity;
-        auto eos_amount = eos_quantity.amount;
-        double price = double(ubi_balance) / eos_balance;
-
-        uint64_t eos_add_amount, ubi_add_amount;
-        // eos amount enough
-        if (double(ubi_amount) / eos_amount <= price)
-        {
-          eos_add_amount = double(ubi_amount) / price;
-          ubi_add_amount = ubi_amount;
-        }
-        else
-        {
-          eos_add_amount = eos_amount;
-          ubi_add_amount = eos_amount * price;
-        }
-        uint64_t eos_back_amount = eos_amount - eos_add_amount;
-        uint64_t ubi_back_amount = ubi_amount - ubi_add_amount;
-
-        // transfer fund to store
-        if (ubi_add_amount > 0)
-        {
-          action(
-              permission_level{get_self(), "active"_n},
-              DAPP_TOKEN_CONTRACT,
-              "transfer"_n,
-              std::make_tuple(get_self(), STORE_CONTRACT, asset(ubi_add_amount, UBI_SYMBOL), std::string("Add liquidity to pool")))
-              .send();
-        }
-        if (eos_add_amount > 0)
-        {
-          action(
-              permission_level{get_self(), "active"_n},
-              SYSTEM_TOKEN_CONTRACT,
-              "transfer"_n,
-              std::make_tuple(get_self(), STORE_CONTRACT, asset(eos_add_amount, EOS_SYMBOL), std::string("Add liquidity to pool")))
-              .send();
-        }
-
-        if (ubi_back_amount > 0)
-        {
-          action(
-              permission_level{get_self(), "active"_n},
-              DAPP_TOKEN_CONTRACT,
-              "transfer"_n,
-              std::make_tuple(get_self(), from, asset(ubi_back_amount, UBI_SYMBOL), std::string("Change for Adding liquidity to pool")))
-              .send();
-        }
-        if (eos_back_amount > 0)
-        {
-          action(
-              permission_level{get_self(), "active"_n},
-              SYSTEM_TOKEN_CONTRACT,
-              "transfer"_n,
-              std::make_tuple(get_self(), from, asset(eos_back_amount, EOS_SYMBOL), std::string("Change for Adding liquidity to pool")))
-              .send();
-        }
-        //      eosio::check(addresses.get_code() == "dan"_n, "Codes don't match.");
-      }
-      return;
-    }
-
-    //deduct fee
-    double received = quantity.amount;
-    received = received * (1 - FEE_RATE);
-
-    double product = ubi_balance * eos_balance;
-
-    double buy = ubi_balance - (product / (received + eos_balance));
-
-    auto buy_quantity = asset(buy, UBI_SYMBOL);
-
-    // transfer to user
-    action(
-        permission_level{STORE_CONTRACT, "active"_n},
-        DAPP_TOKEN_CONTRACT,
-        "transfer"_n,
-        std::make_tuple(STORE_CONTRACT, from, buy_quantity, std::string("Buy UBI with EOS")))
-        .send();
-
-    // transfer fund to store
-    action(
-        permission_level{to, "active"_n},
-        SYSTEM_TOKEN_CONTRACT,
-        "transfer"_n,
-        std::make_tuple(to, STORE_CONTRACT, quantity, std::string("Buy UBI with EOS")))
-        .send();
+    tokenuniswap::receive_common(from, DIRECTION_BUY, (memo == "add"), DAPP_TOKEN_CONTRACT, UBI_SYMBOL, quantity);
   }
 }
 
@@ -133,118 +22,138 @@ void tokenuniswap::receive_ubi(name from, name to, asset quantity, std::string m
 {
   if (to == get_self() && quantity.symbol == UBI_SYMBOL)
   {
-    // get EOS balance
-    double eos_balance = eosio::token::get_balance(SYSTEM_TOKEN_CONTRACT, STORE_CONTRACT, EOS_SYMBOL.code()).amount;
+    tokenuniswap::receive_common(from, DIRECTION_SELL, (memo == "add"), DAPP_TOKEN_CONTRACT, UBI_SYMBOL, quantity);
+  }
+}
 
-    // get UBI balance
-    double ubi_balance = eosio::token::get_balance(DAPP_TOKEN_CONTRACT, STORE_CONTRACT, UBI_SYMBOL.code()).amount;
+void tokenuniswap::receive_common(name user, uint8_t direction, bool isAdd, name token_contract, symbol token_symbol, asset in_quantity)
+{
+  // get base balance
+  double base_balance = eosio::token::get_balance(SYSTEM_TOKEN_CONTRACT, STORE_CONTRACT, BASE_SYMBOL.code()).amount;
 
-    // add liquidity logic
-    if (memo == "add")
+  // get token balance
+  double token_balance = eosio::token::get_balance(token_contract, STORE_CONTRACT, token_symbol.code()).amount;
+
+  // add liquidity logic
+  if (isAdd)
+  {
+    liquidity_index liquidityRecords(get_self(), user.value);
+    auto existing = direction == DIRECTION_BUY ? liquidityRecords.find(token_contract.value) : liquidityRecords.find(SYSTEM_TOKEN_CONTRACT.value);
+    // not exsit
+    if (existing == liquidityRecords.end())
     {
-      liquidity_index liquidityRecords(get_self(), from.value);
-      auto existing = liquidityRecords.find(SYSTEM_TOKEN_CONTRACT.value);
-      // not exsit
-      if (existing == liquidityRecords.end())
+      liquidityRecords.emplace(_self, [&](auto &record) {
+        record.contract = direction == DIRECTION_BUY ? SYSTEM_TOKEN_CONTRACT : token_contract;
+        record.quantity = in_quantity;
+      });
+    }
+    else
+    {
+      liquidityRecords.erase(existing);
+
+      auto base_quantity = direction == DIRECTION_BUY ? in_quantity : existing->quantity;
+      auto token_quantity = direction == DIRECTION_BUY ? existing->quantity : in_quantity;
+      auto base_amount = base_quantity.amount;
+      auto token_amount = token_quantity.amount;
+      double price = double(token_balance) / base_balance;
+
+      uint64_t base_add_amount, token_add_amount;
+      // base amount enough
+      if (double(token_amount) / base_amount <= price)
       {
-        liquidityRecords.emplace(_self, [&](auto &record) {
-          record.contract = DAPP_TOKEN_CONTRACT;
-          record.quantity = quantity;
-        });
+        base_add_amount = double(token_amount) / price;
+        token_add_amount = token_amount;
       }
       else
       {
-        liquidityRecords.erase(existing);
-
-        auto ubi_quantity = quantity;
-        auto ubi_amount = ubi_quantity.amount;
-        auto eos_quantity = existing->quantity;
-        auto eos_amount = eos_quantity.amount;
-        double price = double(ubi_balance) / eos_balance;
-
-        uint64_t eos_add_amount, ubi_add_amount;
-        // eos amount enough
-        if (double(ubi_amount) / eos_amount <= price)
-        {
-          eos_add_amount = double(ubi_amount) / price;
-          ubi_add_amount = ubi_amount;
-        }
-        else
-        {
-          eos_add_amount = eos_amount;
-          ubi_add_amount = eos_amount * price;
-        }
-        uint64_t eos_back_amount = eos_amount - eos_add_amount;
-        uint64_t ubi_back_amount = ubi_amount - ubi_add_amount;
-
-        // transfer fund to store
-        if (ubi_add_amount > 0)
-        {
-          action(
-              permission_level{get_self(), "active"_n},
-              DAPP_TOKEN_CONTRACT,
-              "transfer"_n,
-              std::make_tuple(get_self(), STORE_CONTRACT, asset(ubi_add_amount, UBI_SYMBOL), std::string("Add liquidity to pool")))
-              .send();
-        }
-        if (eos_add_amount > 0)
-        {
-          action(
-              permission_level{get_self(), "active"_n},
-              SYSTEM_TOKEN_CONTRACT,
-              "transfer"_n,
-              std::make_tuple(get_self(), STORE_CONTRACT, asset(eos_add_amount, EOS_SYMBOL), std::string("Add liquidity to pool")))
-              .send();
-        }
-
-        if (ubi_back_amount > 0)
-        {
-          action(
-              permission_level{get_self(), "active"_n},
-              DAPP_TOKEN_CONTRACT,
-              "transfer"_n,
-              std::make_tuple(get_self(), from, asset(ubi_back_amount, UBI_SYMBOL), std::string("Change for Adding liquidity to pool")))
-              .send();
-        }
-        if (eos_back_amount > 0)
-        {
-          action(
-              permission_level{get_self(), "active"_n},
-              SYSTEM_TOKEN_CONTRACT,
-              "transfer"_n,
-              std::make_tuple(get_self(), from, asset(eos_back_amount, EOS_SYMBOL), std::string("Change for Adding liquidity to pool")))
-              .send();
-        }
-        //      eosio::check(addresses.get_code() == "dan"_n, "Codes don't match.");
+        base_add_amount = base_amount;
+        token_add_amount = double(base_amount) * price;
       }
-      return;
-    }
+      uint64_t base_back_amount = base_amount - base_add_amount;
+      uint64_t token_back_amount = token_amount - token_add_amount;
 
+      // transfer fund to store
+      if (token_add_amount > 0)
+      {
+        action(
+            permission_level{get_self(), "active"_n},
+            token_contract,
+            "transfer"_n,
+            std::make_tuple(get_self(), STORE_CONTRACT, asset(token_add_amount, token_symbol), std::string("Add liquidity to pool")))
+            .send();
+      }
+      if (base_add_amount > 0)
+      {
+        action(
+            permission_level{get_self(), "active"_n},
+            SYSTEM_TOKEN_CONTRACT,
+            "transfer"_n,
+            std::make_tuple(get_self(), STORE_CONTRACT, asset(base_add_amount, BASE_SYMBOL), std::string("Add liquidity to pool")))
+            .send();
+      }
+      if (token_back_amount > 0)
+      {
+        action(
+            permission_level{get_self(), "active"_n},
+            token_contract,
+            "transfer"_n,
+            std::make_tuple(get_self(), user, asset(token_back_amount, token_symbol), std::string("Change for Adding liquidity to pool")))
+            .send();
+      }
+      if (base_back_amount > 0)
+      {
+        action(
+            permission_level{get_self(), "active"_n},
+            SYSTEM_TOKEN_CONTRACT,
+            "transfer"_n,
+            std::make_tuple(get_self(), user, asset(base_back_amount, BASE_SYMBOL), std::string("Change for Adding liquidity to pool")))
+            .send();
+      }
+    }
+    return;
+  }
+  // exchange logic
+  else
+  {
     //deduct fee
-    double received = quantity.amount;
+    double received = in_quantity.amount;
     received = received * (1 - FEE_RATE);
 
-    double product = ubi_balance * eos_balance;
-
-    double sell = eos_balance - (product / (received + ubi_balance));
-
-    auto sell_quantity = asset(sell, EOS_SYMBOL);
+    double product = token_balance * base_balance;
+    asset out_quantity;
+    name out_contract, in_contract;
+    if (direction == DIRECTION_BUY)
+    {
+      auto out_amount = token_balance - (product / (received + base_balance));
+      out_quantity = asset(out_amount, token_symbol);
+      out_contract = token_contract;
+      in_contract = SYSTEM_TOKEN_CONTRACT;
+    }
+    else
+    {
+      auto out_amount = base_balance - (product / (received + token_balance));
+      out_quantity = asset(out_amount, BASE_SYMBOL);
+      out_contract = SYSTEM_TOKEN_CONTRACT;
+      in_contract = token_contract;
+    }
 
     // transfer to user
     action(
         permission_level{STORE_CONTRACT, "active"_n},
-        SYSTEM_TOKEN_CONTRACT,
+        out_contract,
         "transfer"_n,
-        std::make_tuple(STORE_CONTRACT, from, sell_quantity, std::string("Sell UBI for EOS")))
+        std::make_tuple(STORE_CONTRACT, user, out_quantity, std::string("Exchange with Uniswap")))
         .send();
 
     // transfer fund to store
     action(
-        permission_level{to, "active"_n},
-        DAPP_TOKEN_CONTRACT,
+        permission_level{get_self(), "active"_n},
+        in_contract,
         "transfer"_n,
-        std::make_tuple(to, STORE_CONTRACT, quantity, std::string("Sell UBI for EOS")))
+        std::make_tuple(get_self(), STORE_CONTRACT, in_quantity, std::string("Transfer fund to store")))
         .send();
+
+    return;
   }
 }
 
