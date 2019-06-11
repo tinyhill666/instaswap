@@ -4,13 +4,34 @@
 #include <eosiolib/action.hpp>
 #include <eosio.token/eosio.token.hpp>
 
-ACTION tokenuniswap::hi(name user)
+ACTION tokenuniswap::create(name token_contract, asset quantity, name store_account)
 {
-  require_auth(user);
-  print("Hello, ", name{user});
+  require_auth(get_self());
+  quantity.amount = 0;
+  market_index markets(get_self(), get_self().value);
+  markets.emplace(get_self(), [&](auto &record) {
+    record.store = store_account;
+    record.contract = token_contract;
+    record.target = quantity;
+    record.total_share = 0;
+  });
+
+  // check auth of store account
+  action(
+      permission_level{get_self(), "active"_n},
+      SYSTEM_TOKEN_CONTRACT,
+      "transfer"_n,
+      std::make_tuple(get_self(), store_account, asset(1, BASE_SYMBOL), std::string("test auth")))
+      .send();
+  action(
+      permission_level{store_account, "active"_n},
+      SYSTEM_TOKEN_CONTRACT,
+      "transfer"_n,
+      std::make_tuple(store_account, token_contract, asset(1, BASE_SYMBOL), std::string("test auth")))
+      .send();
 }
 
-void tokenuniswap::receive_eos(name from, name to, asset quantity, std::string memo)
+void tokenuniswap::receive_base(name from, name to, asset quantity, std::string memo)
 {
   if (to == get_self() && quantity.symbol == BASE_SYMBOL)
   {
@@ -18,11 +39,15 @@ void tokenuniswap::receive_eos(name from, name to, asset quantity, std::string m
   }
 }
 
-void tokenuniswap::receive_ubi(name from, name to, asset quantity, std::string memo)
+void tokenuniswap::receive_token(name from, name to, asset quantity, std::string memo)
 {
-  if (to == get_self() && quantity.symbol == UBI_SYMBOL)
+  tokenuniswap::market_index_by_token marketlist(get_self(), get_self().value);
+  for (auto &item : marketlist)
   {
-    tokenuniswap::receive_common(from, DIRECTION_SELL, (memo == "add"), DAPP_TOKEN_CONTRACT, UBI_SYMBOL, quantity);
+    if (to == get_self() && quantity.symbol == item.target.symbol && get_code() == item.contract)
+    {
+      tokenuniswap::receive_common(from, DIRECTION_SELL, (memo == "add"), item.contract, item.target.symbol, quantity);
+    }
   }
 }
 
@@ -42,7 +67,7 @@ void tokenuniswap::receive_common(name user, uint8_t direction, bool isAdd, name
     // not exsit
     if (existing == liquidityRecords.end())
     {
-      liquidityRecords.emplace(_self, [&](auto &record) {
+      liquidityRecords.emplace(get_self(), [&](auto &record) {
         record.contract = direction == DIRECTION_BUY ? SYSTEM_TOKEN_CONTRACT : token_contract;
         record.quantity = in_quantity;
       });
@@ -164,40 +189,22 @@ extern "C"
     if (code == SYSTEM_TOKEN_CONTRACT.value && action == "transfer"_n.value)
     {
       eosio::execute_action(
-          name(receiver), name(code), &tokenuniswap::receive_eos);
-    }
-    if (code == DAPP_TOKEN_CONTRACT.value && action == "transfer"_n.value)
-    {
-      eosio::execute_action(
-          name(receiver), name(code), &tokenuniswap::receive_ubi);
+          name(receiver), name(code), &tokenuniswap::receive_base);
     }
 
-    // if (code == receiver) {
-    //   switch (action) {
-    //     EOSIO_DISPATCH_HELPER(bankofstaked,
-    //       (clearhistory)
-    //       (empty)
-    //       (test)
-    //       (rotate)
-    //       (check)
-    //       (forcexpire)
-    //       (expireorder)
-    //       (addwhitelist)
-    //       (delwhitelist)
-    //       (addcreditor)
-    //       (addsafeacnt)
-    //       (delsafeacnt)
-    //       (delcreditor)
-    //       (addblacklist)
-    //       (delblacklist)
-    //       (setplan)
-    //       (activate)
-    //       (activateplan)
-    //       (setrecipient)
-    //       (delrecipient)
-    //       (customorder)
-    //     )
-    //   }
-    // }
+    else if (code != receiver && action == "transfer"_n.value)
+    {
+      eosio::execute_action(
+          name(receiver), name(code), &tokenuniswap::receive_token);
+    }
+
+    if (code == receiver)
+    {
+      switch (action)
+      {
+        EOSIO_DISPATCH_HELPER(tokenuniswap,
+                              (create))
+      }
+    }
   }
 }
