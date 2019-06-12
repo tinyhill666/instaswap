@@ -18,8 +18,10 @@ public:
   tokenuniswap(eosio::name receiver, eosio::name code, datastream<const char *> ds) : contract(receiver, code, ds) {}
 
   ACTION create(name token_contract, asset quantity, name store_account);
-  void receive_token(name from, name to, asset quantity, string memo);
-  void receive_common(name user, uint8_t direction, string function_name, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
+  void receive_pretreatment(name from, name to, asset quantity, string memo);
+  void receive_dispatcher(name user, uint8_t direction, string function_name, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
+  void add_liquidity(name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
+  void exchange(name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
 
 private:
   void split_string(const string &s, vector<string> &v, const string &c)
