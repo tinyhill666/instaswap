@@ -21,46 +21,78 @@ ACTION tokenuniswap::create(name token_contract, asset quantity, name store_acco
       permission_level{get_self(), "active"_n},
       SYSTEM_TOKEN_CONTRACT,
       "transfer"_n,
-      std::make_tuple(get_self(), store_account, asset(1, BASE_SYMBOL), std::string("test auth")))
+      make_tuple(get_self(), store_account, asset(1, BASE_SYMBOL), string("test auth")))
       .send();
   action(
       permission_level{store_account, "active"_n},
       SYSTEM_TOKEN_CONTRACT,
       "transfer"_n,
-      std::make_tuple(store_account, token_contract, asset(1, BASE_SYMBOL), std::string("test auth")))
+      make_tuple(store_account, token_contract, asset(1, BASE_SYMBOL), string("test auth")))
       .send();
 }
 
-void tokenuniswap::receive_base(name from, name to, asset quantity, std::string memo)
+void tokenuniswap::receive_token(name from, name to, asset quantity, string memo)
 {
-  if (to == get_self() && quantity.symbol == BASE_SYMBOL)
+  // important check
+  if (to != get_self())
+  //
   {
-    tokenuniswap::receive_common(from, DIRECTION_BUY, (memo == "add"), DAPP_TOKEN_CONTRACT, UBI_SYMBOL, quantity);
+    return;
   }
-}
-
-void tokenuniswap::receive_token(name from, name to, asset quantity, std::string memo)
-{
-  tokenuniswap::market_index_by_token marketlist(get_self(), get_self().value);
-  for (auto &item : marketlist)
+  else
   {
-    if (to == get_self() && quantity.symbol == item.target.symbol && get_code() == item.contract)
+    // parse memo function_name | target_store_account
+    vector<string> splits;
+    split_string(memo, splits, "|");
+    string function_name = splits[0];
+    string target_store_account_string = splits[1];
+
+    // get target market info
+    tokenuniswap::market_index _market(get_self(), get_self().value);
+    auto target_market_item = _market.get(name(target_store_account_string).value);
+
+    //important check
+    // receive system token
+    if (get_code() == SYSTEM_TOKEN_CONTRACT && quantity.symbol == BASE_SYMBOL)
+    //
     {
-      tokenuniswap::receive_common(from, DIRECTION_SELL, (memo == "add"), item.contract, item.target.symbol, quantity);
+      tokenuniswap::receive_common(from, DIRECTION_BUY, function_name, target_market_item.store, target_market_item.contract, target_market_item.target.symbol, quantity);
+    }
+    // receive dapp token
+    else
+    {
+      tokenuniswap::market_index_by_token marketlist(get_self(), get_self().value);
+      for (auto &item : marketlist)
+      {
+        // important check
+        if (get_code() == item.contract && quantity.symbol == item.target.symbol)
+        {
+          // exchange token with base token
+          if (target_market_item.store == item.store)
+          {
+            tokenuniswap::receive_common(from, DIRECTION_SELL, function_name, item.store, item.contract, item.target.symbol, quantity);
+          }
+          // exhcange token with another token
+          else
+          {
+            // todo
+          }
+        }
+      }
     }
   }
 }
 
-void tokenuniswap::receive_common(name user, uint8_t direction, bool isAdd, name token_contract, symbol token_symbol, asset in_quantity)
+void tokenuniswap::receive_common(name user, uint8_t direction, string function_name, name store_account, name token_contract, symbol token_symbol, asset in_quantity)
 {
   // get base balance
-  double base_balance = eosio::token::get_balance(SYSTEM_TOKEN_CONTRACT, STORE_CONTRACT, BASE_SYMBOL.code()).amount;
+  double base_balance = eosio::token::get_balance(SYSTEM_TOKEN_CONTRACT, store_account, BASE_SYMBOL.code()).amount;
 
   // get token balance
-  double token_balance = eosio::token::get_balance(token_contract, STORE_CONTRACT, token_symbol.code()).amount;
+  double token_balance = eosio::token::get_balance(token_contract, store_account, token_symbol.code()).amount;
 
   // add liquidity logic
-  if (isAdd)
+  if (function_name == "add")
   {
     liquidity_index liquidityRecords(get_self(), user.value);
     auto existing = direction == DIRECTION_BUY ? liquidityRecords.find(token_contract.value) : liquidityRecords.find(SYSTEM_TOKEN_CONTRACT.value);
@@ -104,7 +136,7 @@ void tokenuniswap::receive_common(name user, uint8_t direction, bool isAdd, name
             permission_level{get_self(), "active"_n},
             token_contract,
             "transfer"_n,
-            std::make_tuple(get_self(), STORE_CONTRACT, asset(token_add_amount, token_symbol), std::string("Add liquidity to pool")))
+            make_tuple(get_self(), store_account, asset(token_add_amount, token_symbol), string("Add liquidity to pool")))
             .send();
       }
       if (base_add_amount > 0)
@@ -113,7 +145,7 @@ void tokenuniswap::receive_common(name user, uint8_t direction, bool isAdd, name
             permission_level{get_self(), "active"_n},
             SYSTEM_TOKEN_CONTRACT,
             "transfer"_n,
-            std::make_tuple(get_self(), STORE_CONTRACT, asset(base_add_amount, BASE_SYMBOL), std::string("Add liquidity to pool")))
+            make_tuple(get_self(), store_account, asset(base_add_amount, BASE_SYMBOL), string("Add liquidity to pool")))
             .send();
       }
       if (token_back_amount > 0)
@@ -122,7 +154,7 @@ void tokenuniswap::receive_common(name user, uint8_t direction, bool isAdd, name
             permission_level{get_self(), "active"_n},
             token_contract,
             "transfer"_n,
-            std::make_tuple(get_self(), user, asset(token_back_amount, token_symbol), std::string("Change for Adding liquidity to pool")))
+            make_tuple(get_self(), user, asset(token_back_amount, token_symbol), string("Change for Adding liquidity to pool")))
             .send();
       }
       if (base_back_amount > 0)
@@ -131,7 +163,7 @@ void tokenuniswap::receive_common(name user, uint8_t direction, bool isAdd, name
             permission_level{get_self(), "active"_n},
             SYSTEM_TOKEN_CONTRACT,
             "transfer"_n,
-            std::make_tuple(get_self(), user, asset(base_back_amount, BASE_SYMBOL), std::string("Change for Adding liquidity to pool")))
+            make_tuple(get_self(), user, asset(base_back_amount, BASE_SYMBOL), string("Change for Adding liquidity to pool")))
             .send();
       }
     }
@@ -164,10 +196,10 @@ void tokenuniswap::receive_common(name user, uint8_t direction, bool isAdd, name
 
     // transfer to user
     action(
-        permission_level{STORE_CONTRACT, "active"_n},
+        permission_level{store_account, "active"_n},
         out_contract,
         "transfer"_n,
-        std::make_tuple(STORE_CONTRACT, user, out_quantity, std::string("Exchange with Uniswap")))
+        make_tuple(store_account, user, out_quantity, string("Exchange with Uniswap")))
         .send();
 
     // transfer fund to store
@@ -175,7 +207,7 @@ void tokenuniswap::receive_common(name user, uint8_t direction, bool isAdd, name
         permission_level{get_self(), "active"_n},
         in_contract,
         "transfer"_n,
-        std::make_tuple(get_self(), STORE_CONTRACT, in_quantity, std::string("Transfer fund to store")))
+        make_tuple(get_self(), store_account, in_quantity, string("Transfer fund to store")))
         .send();
 
     return;
@@ -186,13 +218,7 @@ extern "C"
 {
   void apply(uint64_t receiver, uint64_t code, uint64_t action)
   {
-    if (code == SYSTEM_TOKEN_CONTRACT.value && action == "transfer"_n.value)
-    {
-      eosio::execute_action(
-          name(receiver), name(code), &tokenuniswap::receive_base);
-    }
-
-    else if (code != receiver && action == "transfer"_n.value)
+    if (code != receiver && action == "transfer"_n.value)
     {
       eosio::execute_action(
           name(receiver), name(code), &tokenuniswap::receive_token);

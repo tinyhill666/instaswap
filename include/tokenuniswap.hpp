@@ -3,16 +3,13 @@
 #include <eosiolib/asset.hpp>
 
 #define BASE_SYMBOL symbol("EOS", 4)
-#define UBI_SYMBOL symbol("UBI", 4)
-// #define SELF_CONTRACT "dappubilogic"_n
-#define DAPP_TOKEN_CONTRACT "dappubitoken"_n
 #define SYSTEM_TOKEN_CONTRACT "eosio.token"_n
-#define STORE_CONTRACT "dappubistore"_n
 #define FEE_RATE 0.003
 #define DIRECTION_BUY 0
 #define DIRECTION_SELL 1
 
 using namespace eosio;
+using namespace std;
 
 CONTRACT tokenuniswap : public contract
 {
@@ -21,11 +18,27 @@ public:
   tokenuniswap(eosio::name receiver, eosio::name code, datastream<const char *> ds) : contract(receiver, code, ds) {}
 
   ACTION create(name token_contract, asset quantity, name store_account);
-  void receive_base(name from, name to, asset quantity, std::string memo);
-  void receive_token(name from, name to, asset quantity, std::string memo);
-  void receive_common(name user, uint8_t direction, bool isAdd, name token_contract, symbol token_symbol, asset in_quantity);
+  void receive_token(name from, name to, asset quantity, string memo);
+  void receive_common(name user, uint8_t direction, string function_name, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
 
 private:
+  void split_string(const string &s, vector<string> &v, const string &c)
+  {
+    string::size_type pos1, pos2;
+    pos2 = s.find(c);
+    pos1 = 0;
+    while (string::npos != pos2)
+    {
+      v.push_back(s.substr(pos1, pos2 - pos1));
+
+      pos1 = pos2 + c.size();
+      pos2 = s.find(c, pos1);
+    }
+    if (pos1 != s.length())
+      v.push_back(s.substr(pos1));
+  }
+
+  //table
   TABLE liquidity
   {
     name contract;
