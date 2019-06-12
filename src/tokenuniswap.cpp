@@ -7,9 +7,19 @@
 ACTION tokenuniswap::create(name token_contract, asset quantity, name store_account)
 {
   require_auth(get_self());
+  eosio::check(quantity.symbol.precision() == 4, "only support token of 4 digit precesion");
   quantity.amount = 0;
-  market_index markets(get_self(), get_self().value);
-  markets.emplace(get_self(), [&](auto &record) {
+  tokenuniswap::market_index_by_token marketlist(get_self(), get_self().value);
+  for (auto &item : marketlist)
+  {
+    if (token_contract == item.contract && quantity.symbol == item.target.symbol)
+    {
+      eosio::check(false, "market already exsit!");
+      return;
+    }
+  }
+  // market_index markets(get_self(), get_self().value);
+  marketlist.emplace(get_self(), [&](auto &record) {
     record.store = store_account;
     record.contract = token_contract;
     record.target = quantity;
