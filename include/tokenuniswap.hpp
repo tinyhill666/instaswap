@@ -20,6 +20,7 @@ public:
   ACTION create(name token_contract, asset quantity, name store_account);
   void receive_pretreatment(name from, name to, asset quantity, string memo);
   void receive_dispatcher(name user, uint8_t direction, string function_name, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
+  void init_liquidity(name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
   void add_liquidity(name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
   void exchange(name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
 
@@ -49,6 +50,7 @@ private:
   };
   typedef eosio::multi_index<"liquidity"_n, liquidity> liquidity_index;
 
+  // makert id is store account
   TABLE market
   {
     name store;
@@ -67,9 +69,9 @@ private:
 
   TABLE share
   {
-    uint64_t market_id;
+    name market_id;
     uint64_t my_share;
-    uint64_t primary_key() const { return market_id; }
+    uint64_t primary_key() const { return market_id.value; }
   };
   typedef eosio::multi_index<"shares"_n, share> share_index;
 };
