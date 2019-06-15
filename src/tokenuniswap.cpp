@@ -32,18 +32,8 @@ ACTION tokenuniswap::create(name token_contract, asset quantity, name store_acco
   });
 
   // check auth of store account
-  action(
-      permission_level{get_self(), "active"_n},
-      SYSTEM_TOKEN_CONTRACT,
-      "transfer"_n,
-      make_tuple(get_self(), store_account, asset(1, BASE_SYMBOL), string("test auth")))
-      .send();
-  action(
-      permission_level{store_account, "active"_n},
-      SYSTEM_TOKEN_CONTRACT,
-      "transfer"_n,
-      make_tuple(store_account, token_contract, asset(1, BASE_SYMBOL), string("test auth")))
-      .send();
+  tokenuniswap::inline_transfer(SYSTEM_TOKEN_CONTRACT, get_self(), store_account, asset(1, BASE_SYMBOL), string("test auth"));
+  tokenuniswap::inline_transfer(SYSTEM_TOKEN_CONTRACT, store_account, token_contract, asset(1, BASE_SYMBOL), string("test auth"));
 }
 
 void tokenuniswap::receive_pretreatment(name from, name to, asset quantity, string memo)
@@ -199,38 +189,17 @@ void tokenuniswap::add_liquidity(name user, uint8_t direction, name store_accoun
     });
 
     // transfer fund to store
+    tokenuniswap::inline_transfer(token_contract, get_self(), store_account, asset(token_add_amount, token_symbol), string("Add liquidity to pool"));
+    tokenuniswap::inline_transfer(SYSTEM_TOKEN_CONTRACT, get_self(), store_account, asset(base_add_amount, BASE_SYMBOL), string("Add liquidity to pool"));
 
-    action(
-        permission_level{get_self(), "active"_n},
-        token_contract,
-        "transfer"_n,
-        make_tuple(get_self(), store_account, asset(token_add_amount, token_symbol), string("Add liquidity to pool")))
-        .send();
-
-    action(
-        permission_level{get_self(), "active"_n},
-        SYSTEM_TOKEN_CONTRACT,
-        "transfer"_n,
-        make_tuple(get_self(), store_account, asset(base_add_amount, BASE_SYMBOL), string("Add liquidity to pool")))
-        .send();
-
+    // return unmatch amount
     if (token_back_amount > 0)
     {
-      action(
-          permission_level{get_self(), "active"_n},
-          token_contract,
-          "transfer"_n,
-          make_tuple(get_self(), user, asset(token_back_amount, token_symbol), string("Change for Adding liquidity to pool")))
-          .send();
+      tokenuniswap::inline_transfer(token_contract, get_self(), user, asset(token_back_amount, token_symbol), string("Change for Adding liquidity to pool"));
     }
     if (base_back_amount > 0)
     {
-      action(
-          permission_level{get_self(), "active"_n},
-          SYSTEM_TOKEN_CONTRACT,
-          "transfer"_n,
-          make_tuple(get_self(), user, asset(base_back_amount, BASE_SYMBOL), string("Change for Adding liquidity to pool")))
-          .send();
+      tokenuniswap::inline_transfer(SYSTEM_TOKEN_CONTRACT, get_self(), user, asset(base_back_amount, BASE_SYMBOL), string("Change for Adding liquidity to pool"));
     }
   }
   return;
@@ -270,20 +239,10 @@ void tokenuniswap::exchange(name user, uint8_t direction, name store_account, na
   }
 
   // transfer to user
-  action(
-      permission_level{store_account, "active"_n},
-      out_contract,
-      "transfer"_n,
-      make_tuple(store_account, user, out_quantity, string("Exchange with Uniswap")))
-      .send();
+  tokenuniswap::inline_transfer(out_contract, store_account, user, out_quantity, string("Exchange with Uniswap"));
 
   // transfer fund to store
-  action(
-      permission_level{get_self(), "active"_n},
-      in_contract,
-      "transfer"_n,
-      make_tuple(get_self(), store_account, in_quantity, string("Transfer fund to store")))
-      .send();
+  tokenuniswap::inline_transfer(in_contract, get_self(), store_account, in_quantity, string("Transfer fund to store"));
 
   return;
 }
@@ -334,19 +293,8 @@ void tokenuniswap::init_liquidity(name user, uint8_t direction, name store_accou
     });
 
     // transfer fund to store
-    action(
-        permission_level{get_self(), "active"_n},
-        token_contract,
-        "transfer"_n,
-        make_tuple(get_self(), store_account, asset(token_amount, token_symbol), string("Init liquidity pool")))
-        .send();
-
-    action(
-        permission_level{get_self(), "active"_n},
-        SYSTEM_TOKEN_CONTRACT,
-        "transfer"_n,
-        make_tuple(get_self(), store_account, asset(base_amount, BASE_SYMBOL), string("Init liquidity pool")))
-        .send();
+    tokenuniswap::inline_transfer(token_contract, get_self(), store_account, asset(token_amount, token_symbol), string("Init liquidity pool"));
+    tokenuniswap::inline_transfer(SYSTEM_TOKEN_CONTRACT, get_self(), store_account, asset(base_amount, BASE_SYMBOL), string("Init liquidity pool"));
 
     // check pool balance
     // double base_balance = eosio::token::get_balance(SYSTEM_TOKEN_CONTRACT, store_account, BASE_SYMBOL.code()).amount;

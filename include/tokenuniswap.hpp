@@ -25,6 +25,16 @@ public:
   void exchange(name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
 
 private:
+  void inline_transfer(name token_contract, name from, name to, asset qunatity, string memo)
+  {
+    action(
+        permission_level{from, "active"_n},
+        token_contract,
+        "transfer"_n,
+        make_tuple(from, to, qunatity, memo))
+        .send();
+  }
+
   void split_string(const string &s, vector<string> &v, const string &c)
   {
     string::size_type pos1, pos2;
