@@ -25,6 +25,77 @@ public:
   void exchange(name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
 
 private:
+  void create_account(name store_account)
+  {
+    // create account
+
+    using eosio::permission_level;
+    using eosio::public_key;
+
+    struct permission_level_weight
+    {
+      permission_level permission;
+      uint16_t weight;
+
+      // explicit serialization macro is not necessary, used here only to improve compilation time
+      // EOSLIB_SERIALIZE(permission_level_weight, (permission)(weight))
+    };
+
+    struct key_weight
+    {
+      eosio::public_key key;
+      uint16_t weight;
+
+      // explicit serialization macro is not necessary, used here only to improve compilation time
+      // EOSLIB_SERIALIZE(key_weight, (key)(weight))
+    };
+
+    struct wait_weight
+    {
+      uint32_t wait_sec;
+      uint16_t weight;
+
+      // explicit serialization macro is not necessary, used here only to improve compilation time
+      // EOSLIB_SERIALIZE(wait_weight, (wait_sec)(weight))
+    };
+
+    struct authority
+    {
+      uint32_t threshold = 0;
+      std::vector<key_weight> keys;
+      std::vector<permission_level_weight> accounts;
+      std::vector<wait_weight> waits;
+
+      // explicit serialization macro is not necessary, used here only to improve compilation time
+      // EOSLIB_SERIALIZE(authority, (threshold)(keys)(accounts)(waits))
+    };
+
+    // owner key
+    permission_level owner_permission_level = permission_level(get_self(), "active"_n);
+    permission_level_weight owner_permission_level_weight = {.permission = owner_permission_level, .weight = 1};
+    vector<permission_level_weight> owner_accounts{owner_permission_level_weight};
+    authority owner_authority = {.threshold = 1, .keys = {}, .accounts = owner_accounts, .waits = {}};
+
+    // active key
+    permission_level active_permission_level = permission_level(get_self(), "eosio.code"_n);
+    permission_level_weight active_permission_level_weight = {.permission = active_permission_level, .weight = 1};
+    vector<permission_level_weight> active_accounts{active_permission_level_weight};
+    authority active_authority = {.threshold = 1, .keys = {}, .accounts = active_accounts, .waits = {}};
+
+    action(
+        permission_level{get_self(), "active"_n},
+        "eosio"_n,
+        "newaccount"_n,
+        make_tuple(get_self(), store_account, owner_authority, active_authority))
+        .send();
+
+    action(
+        permission_level{get_self(), "active"_n},
+        "eosio"_n,
+        "buyrambytes"_n,
+        make_tuple(get_self(), store_account, 5000))
+        .send();
+  }
   void inline_transfer(name token_contract, name from, name to, asset qunatity, string memo)
   {
     action(

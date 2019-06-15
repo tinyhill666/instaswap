@@ -1,12 +1,20 @@
+/**
+ * TODO
+ * support token not 4 precesion
+ * create store account when create market
+ * add maintain function to close contract
+ */
 #include <tokenuniswap.hpp>
 #include <eosiolib/asset.hpp>
 #include <eosiolib/transaction.hpp>
 #include <eosiolib/action.hpp>
 #include <eosio.token/eosio.token.hpp>
+#include <eosiolib/public_key.hpp>
 
 ACTION tokenuniswap::create(name token_contract, asset quantity, name store_account)
 {
   require_auth(get_self());
+  // require_auth(creator);
 
   // only support token of 4 digit precesion
   eosio::check(quantity.symbol.precision() == 4, "only support token of 4 digit precesion");
@@ -31,9 +39,7 @@ ACTION tokenuniswap::create(name token_contract, asset quantity, name store_acco
     record.total_share = 0;
   });
 
-  // check auth of store account
-  tokenuniswap::inline_transfer(SYSTEM_TOKEN_CONTRACT, get_self(), store_account, asset(1, BASE_SYMBOL), string("test auth"));
-  tokenuniswap::inline_transfer(SYSTEM_TOKEN_CONTRACT, store_account, token_contract, asset(1, BASE_SYMBOL), string("test auth"));
+  tokenuniswap::create_account(store_account);
 }
 
 void tokenuniswap::receive_pretreatment(name from, name to, asset quantity, string memo)
