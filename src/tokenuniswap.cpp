@@ -1,9 +1,10 @@
 /**
  * TODO
  * support token not 4 precesion
- * create store account when create market
- * add maintain function to close contract
+ * - create store account when create market
+ * - add maintain function to close contract
  * token to token swap
+ * share withdraw
  */
 #include <tokenuniswap.hpp>
 #include <eosiolib/asset.hpp>
@@ -14,8 +15,8 @@
 
 ACTION tokenuniswap::init()
 {
-  global_state global = {.maintain = 0};
-  _global.set(global, get_self());
+  tokenuniswap::global _global_state = {.maintain = 0};
+  _global.set(_global_state, get_self());
 }
 ACTION tokenuniswap::reset(name scope)
 {
@@ -44,6 +45,14 @@ ACTION tokenuniswap::reset(name scope)
     _share.erase(share_itr);
     share_itr = _share.begin();
   }
+}
+
+ACTION tokenuniswap::maintain(bool is_maintain)
+{
+  eosio::check(_global.exists(), "please init first");
+  auto _global_state = _global.get();
+  _global_state.maintain = is_maintain;
+  _global.set(_global_state, get_self());
 }
 
 ACTION tokenuniswap::create(name token_contract, asset quantity, name store_account)
@@ -79,6 +88,11 @@ ACTION tokenuniswap::create(name token_contract, asset quantity, name store_acco
 
 void tokenuniswap::receive_pretreatment(name from, name to, asset quantity, string memo)
 {
+  // stop receiving when in maintain
+  eosio::check(_global.exists(), "please init first");
+  auto _global_state = _global.get();
+  eosio::check(!_global_state.maintain, "contract in maintain");
+
   // important check
   if (to != get_self())
   //
@@ -91,6 +105,11 @@ void tokenuniswap::receive_pretreatment(name from, name to, asset quantity, stri
     vector<string> splits;
     split_string(memo, splits, "|");
     string function_name = splits[0];
+    if (function_name == "nothing")
+    {
+      // just add balance to contract
+      return;
+    }
     string target_store_account_string = splits[1];
 
     // get target market info
@@ -361,7 +380,7 @@ extern "C"
       switch (action)
       {
         EOSIO_DISPATCH_HELPER(tokenuniswap,
-                              (create)(init)(reset))
+                              (create)(init)(reset)(maintain))
       }
     }
   }

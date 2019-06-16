@@ -48,11 +48,11 @@ CONTRACT tokenuniswap : public contract
   };
   typedef eosio::multi_index<"shares"_n, share> share_index;
 
-  TABLE global_state
+  TABLE global
   {
     bool maintain;
   };
-  typedef eosio::singleton<"global"_n, global_state> global_state_singleton;
+  typedef eosio::singleton<"global"_n, global> global_state_singleton;
 
 public:
   using contract::contract;
@@ -65,6 +65,7 @@ public:
   ACTION create(name token_contract, asset quantity, name store_account);
   ACTION reset(name scope);
   ACTION init();
+  ACTION maintain(bool is_maintain);
   void receive_pretreatment(name from, name to, asset quantity, string memo);
   void receive_dispatcher(name user, uint8_t direction, string function_name, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
   void init_liquidity(name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
