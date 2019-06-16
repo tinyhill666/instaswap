@@ -3,6 +3,7 @@
  * support token not 4 precesion
  * create store account when create market
  * add maintain function to close contract
+ * token to token swap
  */
 #include <tokenuniswap.hpp>
 #include <eosiolib/asset.hpp>
@@ -10,6 +11,40 @@
 #include <eosiolib/action.hpp>
 #include <eosio.token/eosio.token.hpp>
 #include <eosiolib/public_key.hpp>
+
+ACTION tokenuniswap::init()
+{
+  global_state global = {.maintain = 0};
+  _global.set(global, get_self());
+}
+ACTION tokenuniswap::reset(name scope)
+{
+  require_auth(get_self());
+
+  liquidity_index _liquidity(get_self(), scope.value);
+  auto liquidity_itr = _liquidity.begin();
+  while (liquidity_itr != _liquidity.end())
+  {
+    _liquidity.erase(liquidity_itr);
+    liquidity_itr = _liquidity.begin();
+  }
+
+  market_index _market(get_self(), scope.value);
+  auto market_itr = _market.begin();
+  while (market_itr != _market.end())
+  {
+    _market.erase(market_itr);
+    market_itr = _market.begin();
+  }
+
+  share_index _share(get_self(), scope.value);
+  auto share_itr = _share.begin();
+  while (share_itr != _share.end())
+  {
+    _share.erase(share_itr);
+    share_itr = _share.begin();
+  }
+}
 
 ACTION tokenuniswap::create(name token_contract, asset quantity, name store_account)
 {
@@ -33,7 +68,7 @@ ACTION tokenuniswap::create(name token_contract, asset quantity, name store_acco
   }
 
   marketlist.emplace(get_self(), [&](auto &record) {
-    record.store = store_account;
+    record.market_name = store_account;
     record.contract = token_contract;
     record.target = quantity;
     record.total_share = 0;
@@ -67,7 +102,7 @@ void tokenuniswap::receive_pretreatment(name from, name to, asset quantity, stri
     if (get_code() == SYSTEM_TOKEN_CONTRACT && quantity.symbol == BASE_SYMBOL)
     //
     {
-      tokenuniswap::receive_dispatcher(from, DIRECTION_BUY, function_name, target_market_item.store, target_market_item.contract, target_market_item.target.symbol, quantity);
+      tokenuniswap::receive_dispatcher(from, DIRECTION_BUY, function_name, target_market_item.market_name, target_market_item.contract, target_market_item.target.symbol, quantity);
     }
     // receive dapp token
     else
@@ -79,9 +114,9 @@ void tokenuniswap::receive_pretreatment(name from, name to, asset quantity, stri
         if (get_code() == item.contract && quantity.symbol == item.target.symbol)
         {
           // exchange token with base token
-          if (target_market_item.store == item.store)
+          if (target_market_item.market_name == item.market_name)
           {
-            tokenuniswap::receive_dispatcher(from, DIRECTION_SELL, function_name, item.store, item.contract, item.target.symbol, quantity);
+            tokenuniswap::receive_dispatcher(from, DIRECTION_SELL, function_name, item.market_name, item.contract, item.target.symbol, quantity);
           }
           // exhcange token with another token
           else
@@ -118,18 +153,22 @@ void tokenuniswap::add_liquidity(name user, uint8_t direction, name store_accoun
 {
 
   liquidity_index _liquidity(get_self(), user.value);
-  auto existing = direction == DIRECTION_BUY ? _liquidity.find(token_contract.value) : _liquidity.find(SYSTEM_TOKEN_CONTRACT.value);
-  // not exsit . add liquidity step1
+  auto existing = _liquidity.find(store_account.value);
+  // not exsit . add liquidity step1 , add token too contract
   if (existing == _liquidity.end())
   {
+    eosio::check(direction == DIRECTION_SELL, "send token first");
+
     _liquidity.emplace(get_self(), [&](auto &record) {
-      record.contract = direction == DIRECTION_BUY ? SYSTEM_TOKEN_CONTRACT : token_contract;
+      record.market_name = store_account;
       record.quantity = in_quantity;
     });
   }
   //add liquidity step2
   else
   {
+    eosio::check(direction == DIRECTION_BUY, "send EOS in step 2");
+
     // erase step1 info
     _liquidity.erase(existing);
 
@@ -141,8 +180,8 @@ void tokenuniswap::add_liquidity(name user, uint8_t direction, name store_accoun
     // get token balance
     double token_balance = eosio::token::get_balance(token_contract, store_account, token_symbol.code()).amount;
 
-    auto base_quantity = direction == DIRECTION_BUY ? in_quantity : existing->quantity;
-    auto token_quantity = direction == DIRECTION_BUY ? existing->quantity : in_quantity;
+    auto base_quantity = in_quantity;
+    auto token_quantity = existing->quantity;
     auto base_amount = base_quantity.amount;
     auto token_amount = token_quantity.amount;
     double price = double(token_balance) / base_balance;
@@ -179,7 +218,7 @@ void tokenuniswap::add_liquidity(name user, uint8_t direction, name store_accoun
     if (share == _share.end())
     {
       _share.emplace(get_self(), [&](auto &record) {
-        record.market_id = store_account;
+        record.market_name = store_account;
         record.my_share = add_share;
       });
     }
@@ -255,25 +294,27 @@ void tokenuniswap::exchange(name user, uint8_t direction, name store_account, na
 
 void tokenuniswap::init_liquidity(name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity)
 {
-
   liquidity_index _liquidity(get_self(), user.value);
-  auto existing = direction == DIRECTION_BUY ? _liquidity.find(token_contract.value) : _liquidity.find(SYSTEM_TOKEN_CONTRACT.value);
-  // not exsit . add liquidity step1
+  auto existing = _liquidity.find(store_account.value);
+  // not exsit . add liquidity step1 , add token too contract
   if (existing == _liquidity.end())
   {
+    eosio::check(direction == DIRECTION_SELL, "send token first");
+
     _liquidity.emplace(get_self(), [&](auto &record) {
-      record.contract = direction == DIRECTION_BUY ? SYSTEM_TOKEN_CONTRACT : token_contract;
+      record.market_name = store_account;
       record.quantity = in_quantity;
     });
   }
   //add liquidity step2
   else
   {
+    eosio::check(direction == DIRECTION_BUY, "send EOS in step 2");
     // erase step1 info
     _liquidity.erase(existing);
 
-    auto base_quantity = direction == DIRECTION_BUY ? in_quantity : existing->quantity;
-    auto token_quantity = direction == DIRECTION_BUY ? existing->quantity : in_quantity;
+    auto base_quantity = in_quantity;
+    auto token_quantity = existing->quantity;
     auto base_amount = base_quantity.amount;
     auto token_amount = token_quantity.amount;
 
@@ -290,7 +331,7 @@ void tokenuniswap::init_liquidity(name user, uint8_t direction, name store_accou
     auto add_share = base_amount;
 
     _share.emplace(get_self(), [&](auto &record) {
-      record.market_id = store_account;
+      record.market_name = store_account;
       record.my_share = add_share;
     });
 
@@ -301,12 +342,6 @@ void tokenuniswap::init_liquidity(name user, uint8_t direction, name store_accou
     // transfer fund to store
     tokenuniswap::inline_transfer(token_contract, get_self(), store_account, asset(token_amount, token_symbol), string("Init liquidity pool"));
     tokenuniswap::inline_transfer(SYSTEM_TOKEN_CONTRACT, get_self(), store_account, asset(base_amount, BASE_SYMBOL), string("Init liquidity pool"));
-
-    // check pool balance
-    // double base_balance = eosio::token::get_balance(SYSTEM_TOKEN_CONTRACT, store_account, BASE_SYMBOL.code()).amount;
-    // eosio::check(base_balance == base_amount, (string("Liquidity pool should be empty before init") + to_string(base_balance)).c_str());
-    // double token_balance = eosio::token::get_balance(token_contract, store_account, token_symbol.code()).amount;
-    // eosio::check(token_balance == token_amount, "Liquidity pool should be empty before init");
   }
   return;
 }
@@ -326,7 +361,7 @@ extern "C"
       switch (action)
       {
         EOSIO_DISPATCH_HELPER(tokenuniswap,
-                              (create))
+                              (create)(init)(reset))
       }
     }
   }
