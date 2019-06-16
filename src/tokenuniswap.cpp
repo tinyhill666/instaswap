@@ -4,7 +4,7 @@
  * - create store account when create market
  * - add maintain function to close contract
  * token to token swap
- * share withdraw
+ * - share withdraw
  */
 #include <tokenuniswap.hpp>
 #include <eosiolib/asset.hpp>
@@ -15,6 +15,8 @@
 
 ACTION tokenuniswap::init()
 {
+  require_auth(get_self());
+
   tokenuniswap::global _global_state = {.maintain = 0};
   _global.set(_global_state, get_self());
 }
@@ -49,6 +51,8 @@ ACTION tokenuniswap::reset(name scope)
 
 ACTION tokenuniswap::maintain(bool is_maintain)
 {
+  require_auth(get_self());
+
   eosio::check(_global.exists(), "please init first");
   auto _global_state = _global.get();
   _global_state.maintain = is_maintain;
@@ -84,6 +88,55 @@ ACTION tokenuniswap::create(name token_contract, asset quantity, name store_acco
   });
 
   tokenuniswap::create_account(store_account);
+}
+
+ACTION tokenuniswap::withdraw(name user, name market_name, uint64_t withdraw_share)
+{
+  require_auth(user);
+
+  // get share info
+  share_index _share(get_self(), user.value);
+  market_index _market(get_self(), get_self().value);
+
+  auto market = _market.find(market_name.value);
+  eosio::check(market != _market.end(), "can not get market info");
+  auto share = _share.find(market_name.value);
+  eosio::check(share != _share.end(), "can not get share info");
+
+  // pool can not empty
+  auto total_share = market->total_share;
+  eosio::check(total_share > withdraw_share, "pool can not empty");
+
+  auto my_share = share->my_share;
+  eosio::check(my_share >= withdraw_share, "share not enough");
+
+  // get base balance
+  double base_balance = eosio::token::get_balance(SYSTEM_TOKEN_CONTRACT, market_name, BASE_SYMBOL.code()).amount;
+  // get token balance
+  double token_balance = eosio::token::get_balance(market->contract, market_name, market->target.symbol.code()).amount;
+
+  auto withdraw_base_amount = base_balance / total_share * withdraw_share;
+  auto withdraw_token_amount = token_balance / total_share * withdraw_share;
+
+  if (my_share == withdraw_share)
+  {
+    _share.erase(share);
+  }
+  else
+  {
+    //use user ram
+    _share.modify(share, user, [&](auto &record) {
+      record.my_share -= withdraw_share;
+    });
+  }
+
+  _market.modify(market, get_self(), [&](auto &record) {
+    record.total_share -= withdraw_share;
+  });
+
+  // transfer fund to user
+  tokenuniswap::inline_transfer(market->contract, market_name, user, asset(withdraw_token_amount, market->target.symbol), string("Withdraw liquidity from pool"));
+  tokenuniswap::inline_transfer(SYSTEM_TOKEN_CONTRACT, market_name, user, asset(withdraw_base_amount, BASE_SYMBOL), string("Withdraw liquidity from pool"));
 }
 
 void tokenuniswap::receive_pretreatment(name from, name to, asset quantity, string memo)
@@ -379,8 +432,9 @@ extern "C"
     {
       switch (action)
       {
-        EOSIO_DISPATCH_HELPER(tokenuniswap,
-                              (create)(init)(reset)(maintain))
+        EOSIO_DISPATCH_HELPER(
+            tokenuniswap,
+            (create)(init)(reset)(maintain)(withdraw))
       }
     }
   }

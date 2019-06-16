@@ -66,6 +66,7 @@ public:
   ACTION reset(name scope);
   ACTION init();
   ACTION maintain(bool is_maintain);
+  ACTION withdraw(name user, name market_name, uint64_t withdraw_share);
   void receive_pretreatment(name from, name to, asset quantity, string memo);
   void receive_dispatcher(name user, uint8_t direction, string function_name, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
   void init_liquidity(name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
