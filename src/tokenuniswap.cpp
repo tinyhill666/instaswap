@@ -5,6 +5,7 @@
  * - add maintain function to close contract
  * token to token swap
  * - share withdraw
+ * add price guarantee
  */
 #include <tokenuniswap.hpp>
 #include <eosiolib/asset.hpp>
@@ -12,6 +13,7 @@
 #include <eosiolib/action.hpp>
 #include <eosio.token/eosio.token.hpp>
 #include <eosiolib/public_key.hpp>
+#include <string>
 
 ACTION tokenuniswap::init()
 {
@@ -174,7 +176,7 @@ void tokenuniswap::receive_pretreatment(name from, name to, asset quantity, stri
     if (get_code() == SYSTEM_TOKEN_CONTRACT && quantity.symbol == BASE_SYMBOL)
     //
     {
-      tokenuniswap::receive_dispatcher(from, DIRECTION_BUY, function_name, target_market_item.market_name, target_market_item.contract, target_market_item.target.symbol, quantity);
+      tokenuniswap::receive_dispatcher(splits, from, DIRECTION_BUY, function_name, target_market_item.market_name, target_market_item.contract, target_market_item.target.symbol, quantity);
     }
     // receive dapp token
     else
@@ -188,7 +190,7 @@ void tokenuniswap::receive_pretreatment(name from, name to, asset quantity, stri
           // exchange token with base token
           if (target_market_item.market_name == item.market_name)
           {
-            tokenuniswap::receive_dispatcher(from, DIRECTION_SELL, function_name, item.market_name, item.contract, item.target.symbol, quantity);
+            tokenuniswap::receive_dispatcher(splits, from, DIRECTION_SELL, function_name, item.market_name, item.contract, item.target.symbol, quantity);
           }
           // exhcange token with another token
           else
@@ -201,7 +203,7 @@ void tokenuniswap::receive_pretreatment(name from, name to, asset quantity, stri
   }
 }
 
-void tokenuniswap::receive_dispatcher(name user, uint8_t direction, string function_name, name store_account, name token_contract, symbol token_symbol, asset in_quantity)
+void tokenuniswap::receive_dispatcher(vector<string> parameters, name user, uint8_t direction, string function_name, name store_account, name token_contract, symbol token_symbol, asset in_quantity)
 {
   // add liquidity logic
   if (function_name == "add")
@@ -211,7 +213,7 @@ void tokenuniswap::receive_dispatcher(name user, uint8_t direction, string funct
   }
   else if (function_name == "exchange")
   {
-    tokenuniswap::exchange(user, direction, store_account, token_contract, token_symbol, in_quantity);
+    tokenuniswap::exchange(parameters, user, direction, store_account, token_contract, token_symbol, in_quantity);
     return;
   }
   else if (function_name == "init")
@@ -322,9 +324,8 @@ void tokenuniswap::add_liquidity(name user, uint8_t direction, name store_accoun
   return;
 }
 
-void tokenuniswap::exchange(name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity)
+void tokenuniswap::exchange(vector<string> parameters, name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity)
 {
-
   // get base balance
   auto base_balance_amount = eosio::token::get_balance(SYSTEM_TOKEN_CONTRACT, store_account, BASE_SYMBOL.code()).amount;
   eosio::check(base_balance_amount != 0, "base balance can not be 0");
@@ -338,21 +339,40 @@ void tokenuniswap::exchange(name user, uint8_t direction, name store_account, na
   received = received * (1 - FEE_RATE);
 
   double product = token_balance * base_balance;
+  double out_amount;
   asset out_quantity;
   name out_contract, in_contract;
+
   if (direction == DIRECTION_BUY)
   {
-    auto out_amount = token_balance - (product / (received + base_balance));
+    eosio::check((received / base_balance) < MAX_CHANGE_RATE, "exchange amount too big, price change too much");
+    out_amount = token_balance - (product / (received + base_balance));
     out_quantity = asset(out_amount, token_symbol);
     out_contract = token_contract;
     in_contract = SYSTEM_TOKEN_CONTRACT;
   }
   else
   {
-    auto out_amount = base_balance - (product / (received + token_balance));
+    eosio::check((received / token_balance) < MAX_CHANGE_RATE, "exchange amount too big, price change too much");
+    out_amount = base_balance - (product / (received + token_balance));
     out_quantity = asset(out_amount, BASE_SYMBOL);
     out_contract = SYSTEM_TOKEN_CONTRACT;
     in_contract = token_contract;
+  }
+
+  // get guarantee price
+  if (parameters.size() > 2)
+  {
+    double price = received / out_amount;
+    double guarantee_price = tokenuniswap::str_to_double(parameters[2]);
+    if (direction == DIRECTION_BUY)
+    {
+      eosio::check(price < guarantee_price, "price not match");
+    }
+    else
+    {
+      eosio::check(price > guarantee_price, "price not match");
+    }
   }
 
   // transfer to user

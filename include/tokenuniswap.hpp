@@ -2,12 +2,14 @@
 #include <eosiolib/print.hpp>
 #include <eosiolib/asset.hpp>
 #include <eosiolib/singleton.hpp>
+#include <math.h>
 
 #define BASE_SYMBOL symbol("EOS", 4)
 #define SYSTEM_TOKEN_CONTRACT "eosio.token"_n
 #define FEE_RATE 0.003
 #define DIRECTION_BUY 0
 #define DIRECTION_SELL 1
+#define MAX_CHANGE_RATE 0.1
 
 using namespace eosio;
 using namespace std;
@@ -68,13 +70,23 @@ public:
   ACTION maintain(bool is_maintain);
   ACTION withdraw(name user, name market_name, uint64_t withdraw_share);
   void receive_pretreatment(name from, name to, asset quantity, string memo);
-  void receive_dispatcher(name user, uint8_t direction, string function_name, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
+  void receive_dispatcher(vector<string> parameters, name user, uint8_t direction, string function_name, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
   void init_liquidity(name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
   void add_liquidity(name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
-  void exchange(name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
+  void exchange(vector<string> parameters, name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity);
 
 private:
   global_state_singleton _global;
+
+  double str_to_double(string s)
+  {
+    if (s == "")
+      return 0;
+    std::size_t i = s.find(".");
+    int digits = s.length() - i - 1;
+    s.erase(i, 1);
+    return atoi(s.c_str()) / pow(10, digits);
+  }
   void create_account(name store_account)
   {
     // create account
