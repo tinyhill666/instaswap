@@ -327,9 +327,8 @@ void tokenuniswap::add_liquidity(name user, uint8_t direction, name store_accoun
 void tokenuniswap::exchange(vector<string> parameters, name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity)
 {
   // get base balance
-  auto base_balance_amount = eosio::token::get_balance(SYSTEM_TOKEN_CONTRACT, store_account, BASE_SYMBOL.code()).amount;
-  eosio::check(base_balance_amount != 0, "base balance can not be 0");
-  double base_balance = base_balance_amount;
+  double base_balance = eosio::token::get_balance(SYSTEM_TOKEN_CONTRACT, store_account, BASE_SYMBOL.code()).amount;
+  eosio::check(base_balance != 0, "base balance can not be 0");
 
   // get token balance
   double token_balance = eosio::token::get_balance(token_contract, store_account, token_symbol.code()).amount;
