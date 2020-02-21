@@ -1,0 +1,1 @@
+cleos -u https://rpc.yas.plus set account permission plusexchange active '{"threshold": 1,"keys": [{"key": "EOS8AzfzF4UY7tGmNSaa1x6ZbwyY7bagso4fcZUQw7fPu8R2G19eQ","weight": 1}],"accounts": [{"permission":{"actor":"plusexchange","permission":"eosio.code"},"weight":1}]}' owner -p plusexchange
