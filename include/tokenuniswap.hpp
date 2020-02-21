@@ -4,7 +4,7 @@
 #include <eosiolib/singleton.hpp>
 #include <math.h>
 
-#define BASE_SYMBOL symbol("YAS", 4)
+#define BASE_SYMBOL symbol("EOS", 4)
 #define SYSTEM_TOKEN_CONTRACT "eosio.token"_n
 #define FEE_RATE 0.003
 #define DIRECTION_BUY 0

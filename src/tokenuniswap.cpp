@@ -1,10 +1,7 @@
 /**
  * TODO
  * support token not 4 precesion
- * - create store account when create market
- * - add maintain function to close contract
  * token to token swap
- * - share withdraw
  * add price guarantee
  */
 #include <tokenuniswap.hpp>
