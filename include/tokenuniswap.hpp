@@ -4,7 +4,7 @@
 #include <eosiolib/singleton.hpp>
 #include <math.h>
 
-#define BASE_SYMBOL symbol("EOS", 4)
+#define BASE_SYMBOL symbol("YAS", 4)
 #define SYSTEM_TOKEN_CONTRACT "eosio.token"_n
 #define FEE_RATE 0.003
 #define DIRECTION_BUY 0
@@ -56,11 +56,19 @@ CONTRACT tokenuniswap : public contract
   };
   typedef eosio::singleton<"global"_n, global> global_state_singleton;
 
+  TABLE last
+  {
+    name last_user;
+    uint64_t last_time;
+  };
+  typedef eosio::singleton<"last"_n, last> last_state_singleton;
+
 public:
   using contract::contract;
   tokenuniswap(eosio::name receiver, eosio::name code, datastream<const char *> ds)
       : contract(receiver, code, ds),
-        _global(get_self(), get_self().value)
+        _global(get_self(), get_self().value),
+        _last(get_self(), get_self().value)
   {
   }
 
@@ -77,6 +85,7 @@ public:
 
 private:
   global_state_singleton _global;
+  last_state_singleton _last;
 
   double str_to_double(string s)
   {

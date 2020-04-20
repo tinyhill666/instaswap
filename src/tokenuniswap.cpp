@@ -8,7 +8,7 @@
 #include <eosiolib/asset.hpp>
 #include <eosiolib/transaction.hpp>
 #include <eosiolib/action.hpp>
-#include <eosio.token/eosio.token.hpp>
+#include <eosio.token.hpp>
 #include <eosiolib/public_key.hpp>
 #include <string>
 
@@ -18,6 +18,9 @@ ACTION tokenuniswap::init()
 
   tokenuniswap::global _global_state = {.maintain = 0};
   _global.set(_global_state, get_self());
+
+  tokenuniswap::last _last_state = {.last_user = get_self(), .last_time = now()};
+  _last.set(_last_state, get_self());
 }
 ACTION tokenuniswap::reset(name scope)
 {
@@ -323,6 +326,15 @@ void tokenuniswap::add_liquidity(name user, uint8_t direction, name store_accoun
 
 void tokenuniswap::exchange(vector<string> parameters, name user, uint8_t direction, name store_account, name token_contract, symbol token_symbol, asset in_quantity)
 {
+  // check reenter
+  eosio::check(_last.exists(), "please init first");
+  auto _last_state = _last.get();
+  eosio::check(!(_last_state.last_user == user && _last_state.last_time == now()), "can not exchange more than once in a block time.");
+
+  _last_state.last_user = user;
+  _last_state.last_time = now();
+  _last.set(_last_state, get_self());
+
   // get base balance
   double base_balance = eosio::token::get_balance(SYSTEM_TOKEN_CONTRACT, store_account, BASE_SYMBOL.code()).amount;
   eosio::check(base_balance != 0, "base balance can not be 0");
