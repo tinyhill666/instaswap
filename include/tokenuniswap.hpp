@@ -53,22 +53,15 @@ CONTRACT tokenuniswap : public contract
   TABLE global
   {
     bool maintain;
+    bool lock;
   };
   typedef eosio::singleton<"global"_n, global> global_state_singleton;
-
-  TABLE last
-  {
-    name last_user;
-    uint64_t last_time;
-  };
-  typedef eosio::singleton<"last"_n, last> last_state_singleton;
 
 public:
   using contract::contract;
   tokenuniswap(eosio::name receiver, eosio::name code, datastream<const char *> ds)
       : contract(receiver, code, ds),
-        _global(get_self(), get_self().value),
-        _last(get_self(), get_self().value)
+        _global(get_self(), get_self().value)
   {
   }
 
@@ -85,7 +78,6 @@ public:
 
 private:
   global_state_singleton _global;
-  last_state_singleton _last;
 
   double str_to_double(string s)
   {
